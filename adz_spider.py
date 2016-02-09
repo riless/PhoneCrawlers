@@ -1,0 +1,73 @@
+#! /usr/bin/python2.7
+# -*- coding: utf-8 -*- 
+
+from functions import *
+
+
+class AdzSpider(CrawlSpider):
+	outputHandle = open('adz.sql', 'a')
+	outputHandle.write('INSERT IGNORE INTO numbers(phone, country, city_nice, city, date) VALUES')
+
+	starttime = datetime.now()
+	name = "adz"
+	allowed_domains = ["affaires-dz.com"]
+	start_urls = [
+		"http://affaires-dz.com"
+	]
+
+	rules = (
+		Rule(
+			SgmlLinkExtractor(allow_domains=("affaires-dz.com",)),
+			callback='parse_page', follow=True
+		),
+	)
+
+	total = 1310000
+	indicatif = '213'
+	country = 'dz'
+	i = 0
+	err = 0
+	wr = 0
+	
+
+	def parse_page(self, response):
+		hxs = HtmlXPathSelector(response)
+
+		location = hxs.select('//div[@class="ta_details2_description"]/table/tr/td/p').extract()
+		phone = hxs.select('//div[@class="numPro"]/label/text()[1]').extract()
+		
+		try:
+			if len(location)>0:
+				location = location[0].rsplit('<br>', 2)[-2].encode('utf8').strip()
+				if (location == "- Toute l'Algérie"): location = "Alger"
+
+			if len(phone)>0:
+				phone = strip(phone[0], '[^0-9]*')			
+				phone = phone.lstrip('0')	 		
+		 		if phone[:3] != self.indicatif:
+		 			phone = self.indicatif+phone
+
+				norm_location = normalize( location )
+				crawl_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+				duration = (datetime.now() - self.starttime).total_seconds()
+				speed = math.ceil( ( self.i / duration ) * 3600 * 24 )
+				speedmin = math.ceil( ( self.i / duration ) * 60 )
+				t =  (self.i + self.err + self.wr)
+				taux = (self.i * 100) / t
+				tauxWr = (self.wr * 100) / t 
+
+				progression =  ((self.i + self.err) * 100) / self.total
+
+				if len(phone) ==12 and len(norm_location) != 0:
+					self.outputHandle.write(u'("'+phone+'", "'+self.country+'", "'+location.decode('utf8')+'", "'+norm_location+'", "'+crawl_datetime+'"),'+"\n")
+					print "[{}] {}% OK {}% Wr [progress: {}%] ({}/min - {}/24h) | {} | {} | {} | {}".format(self.i, taux,tauxWr, progression, int(speedmin), int(speed), phone, crawl_datetime, location.decode('utf8'), norm_location )
+					self.i += 1
+				else:
+					self.wr += 1
+			else:
+				self.wr += 1
+
+		except:
+			self.err += 1
+
